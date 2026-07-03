@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { proposal, type Proposal } from "./operations";
+import { sanitizeProposalInput } from "./sanitize-proposal";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -105,5 +106,5 @@ export async function extract(
   }
   // Strict validation. An unknown or malformed operation throws here rather than
   // reaching the database.
-  return proposal.parse(block.input);
+  return proposal.parse(sanitizeProposalInput(block.input));
 }

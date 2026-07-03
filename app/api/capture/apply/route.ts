@@ -12,13 +12,14 @@ export async function POST(request: Request) {
   const operations = body?.operations;
   const targetName = body?.targetName;
   const contactId = body?.contactId;
+  const entityChoices = body?.entityChoices;
 
   if (!captureId || !Array.isArray(operations) || !targetName) {
     return NextResponse.json({ error: "captureId, operations, and targetName are required" }, { status: 400 });
   }
 
   try {
-    const contact = await applyCapture({ captureId, operations, targetName, contactId });
+    const contact = await applyCapture({ captureId, operations, targetName, contactId, entityChoices });
     return NextResponse.json({ contact });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Apply failed";

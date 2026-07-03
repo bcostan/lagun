@@ -3,14 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+const captureIcon = (
+  <svg viewBox="0 0 24 24" aria-hidden>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+const peopleIcon = (
+  <svg viewBox="0 0 24 24" aria-hidden>
+    <path d="M4 6h16M4 12h16M4 18h10" />
+  </svg>
+);
+
 export function AppShell({
   children,
   count,
-  showBar = false,
 }: {
   children: React.ReactNode;
   count?: number;
-  showBar?: boolean;
 }) {
   const pathname = usePathname();
   const onCapture = pathname === "/";
@@ -18,28 +28,47 @@ export function AppShell({
 
   return (
     <div className="app">
-      <div className="top">
+      <aside className="sidebar">
         <span className="wordmark">Lagun</span>
+        <nav className="sidebar-nav">
+          <Link href="/" className={`sidebar-link ${onCapture ? "on" : ""}`}>
+            {captureIcon}
+            Capture
+          </Link>
+          <Link href="/contacts" className={`sidebar-link ${onContacts ? "on" : ""}`}>
+            {peopleIcon}
+            People
+          </Link>
+        </nav>
         {typeof count === "number" && (
-          <span className="count">{count} {count === 1 ? "person" : "people"}</span>
+          <span className="sidebar-count">
+            {count} {count === 1 ? "person" : "people"}
+          </span>
         )}
-      </div>
+      </aside>
 
-      <div className="screens" style={{ paddingBottom: showBar ? 130 : 80 }}>
-        {children}
-      </div>
+      <div className="app-main">
+        <div className="top">
+          <span className="wordmark">Lagun</span>
+          {typeof count === "number" && (
+            <span className="count">{count} {count === 1 ? "person" : "people"}</span>
+          )}
+        </div>
 
-      {showBar ? <div id="capture-bar-slot" /> : null}
+        <div className="screens">{children}</div>
 
-      <div className="tabs">
-        <Link href="/" className={`tab ${onCapture ? "on" : ""}`}>
-          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-          Capture
-        </Link>
-        <Link href="/contacts" className={`tab ${onContacts ? "on" : ""}`}>
-          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
-          People
-        </Link>
+        <div id="overlay-slot" aria-hidden="true" />
+
+        <div className="tabs">
+          <Link href="/" className={`tab ${onCapture ? "on" : ""}`}>
+            {captureIcon}
+            Capture
+          </Link>
+          <Link href="/contacts" className={`tab ${onContacts ? "on" : ""}`}>
+            {peopleIcon}
+            People
+          </Link>
+        </div>
       </div>
     </div>
   );

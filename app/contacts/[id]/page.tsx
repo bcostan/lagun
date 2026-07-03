@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
+import { ContactCapture } from "@/components/ContactCapture";
 import { getContactDetail } from "@/lib/contacts";
 import { formatRelativeDate } from "@/lib/dates";
 
@@ -13,13 +13,12 @@ export default async function ContactDetailPage({ params }: Params) {
   const detail = await getContactDetail(id);
   if (!detail) notFound();
 
-  const { contact, relations, interactions, captures } = detail;
+  const { contact, relations, interactions, captures, events: linkedEvents, organizations: linkedOrgs } = detail;
   const roleLine = [contact.role, contact.company].filter(Boolean).join(", ");
 
   return (
-    <AppShell>
-      <section className="screen">
-        <Link href="/contacts" className="back">← Index</Link>
+    <section className="screen">
+      <Link href="/contacts" className="back mobile-only">← Index</Link>
         <div className="plate">
           <div className="nm">{contact.name}</div>
           {roleLine && <div className="role">{roleLine}</div>}
@@ -34,7 +33,9 @@ export default async function ContactDetailPage({ params }: Params) {
           ))}
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <ContactCapture contactId={contact.id} contactName={contact.name} />
+
+        <div style={{ marginTop: 4, marginBottom: 8 }}>
           <Link href={`/contacts/${contact.id}/edit`} className="fil">Edit</Link>
         </div>
 
@@ -65,6 +66,36 @@ export default async function ContactDetailPage({ params }: Params) {
             </div>
           </div>
         </div>
+
+        {linkedEvents.length > 0 && (
+          <>
+            <div className="sec">Events</div>
+            <div className="people">
+              {linkedEvents.map(({ link, event }) => (
+                <Link href={`/events/${event.id}`} className="person" key={link.id}>
+                  <span className="who">{event.name}</span>
+                  <span className="rel">{link.linkType}</span>
+                  {event.series && <span className="extra">{event.series}</span>}
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+
+        {linkedOrgs.length > 0 && (
+          <>
+            <div className="sec">Organizations</div>
+            <div className="people">
+              {linkedOrgs.map(({ link, organization }) => (
+                <Link href={`/organizations/${organization.id}`} className="person" key={link.id}>
+                  <span className="who">{organization.name}</span>
+                  <span className="rel">{link.linkType}</span>
+                  {organization.kind && <span className="extra">{organization.kind}</span>}
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
         {relations.length > 0 && (
           <>
@@ -117,6 +148,5 @@ export default async function ContactDetailPage({ params }: Params) {
           </details>
         )}
       </section>
-    </AppShell>
   );
 }

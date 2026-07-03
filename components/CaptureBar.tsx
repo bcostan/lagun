@@ -1,25 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef } from "react";
 
 export function CaptureBar({
   value,
   onChange,
   onSubmit,
   loading,
+  placeholder = "Write what happened…",
+  error,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   loading?: boolean;
+  placeholder?: string;
+  error?: string | null;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setSlot(document.getElementById("capture-bar-slot"));
-  }, []);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -28,14 +26,15 @@ export function CaptureBar({
     ta.style.height = `${ta.scrollHeight}px`;
   }, [value]);
 
-  const bar = (
-    <div className="bar">
+  return (
+    <div className="capture-bar">
       <div className="barbox">
+        {error && <div className="bar-error">{error}</div>}
         <textarea
           ref={textareaRef}
           rows={1}
           value={value}
-          placeholder="Write what happened…"
+          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -59,7 +58,4 @@ export function CaptureBar({
       </div>
     </div>
   );
-
-  if (slot) return createPortal(bar, slot);
-  return null;
 }

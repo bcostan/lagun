@@ -2,6 +2,7 @@
 
 import type { ChipState } from "@/lib/chips";
 import { updateOperationFromChip } from "@/lib/chips";
+import type { EntityAction } from "@/lib/resolutions";
 
 export function OperationChip({
   chip,
@@ -10,14 +11,69 @@ export function OperationChip({
   chip: ChipState;
   onChange: (chip: ChipState) => void;
 }) {
+  const entityClass = chip.isEntity ? "entity" : "";
+
+  function setEntityAction(action: EntityAction, id?: string) {
+    onChange({
+      ...chip,
+      enabled: action !== "skip",
+      entityAction: action,
+      entityId: id,
+    });
+  }
+
   return (
     <div
-      className={`chip in ${chip.lowConfidence ? "review" : ""} ${!chip.enabled ? "unsupported skipped" : ""}`}
+      className={`chip in ${chip.lowConfidence ? "review" : ""} ${entityClass} ${!chip.enabled ? "skipped" : ""}`}
     >
       <div className="bar-l" />
       <div className="body">
         <div className="k">{chip.label}</div>
-        {chip.operation.type === "set_field" ? (
+
+        {chip.isEntity && chip.entityResolution ? (
+          <>
+            <div className="v" dangerouslySetInnerHTML={{ __html: formatValue(chip.value) }} />
+            {chip.note && <div className="note">{chip.note}</div>}
+            <div className="entity-actions">
+              {chip.entityResolution.hint !== "new" && chip.entityResolution.options.length > 0 && (
+                <select
+                  value={chip.entityAction === "create" ? "__create__" : (chip.entityId ?? "")}
+                  onChange={(e) => {
+                    if (e.target.value === "__create__") {
+                      setEntityAction("create");
+                    } else if (e.target.value === "__skip__") {
+                      setEntityAction("skip");
+                    } else {
+                      setEntityAction("existing", e.target.value);
+                    }
+                  }}
+                >
+                  {chip.entityResolution.options.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.name}{opt.meta ? ` · ${opt.meta}` : ""} (existing)
+                    </option>
+                  ))}
+                  <option value="__create__">
+                    Create {chip.entityResolution.entityType === "event" ? chip.entityResolution.suggestedName : chip.entityResolution.suggestedName} (new)
+                  </option>
+                  <option value="__skip__">Skip</option>
+                </select>
+              )}
+              {chip.entityResolution.hint === "new" && (
+                <div className="entity-toggle">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={chip.enabled}
+                      onChange={(e) => setEntityAction(e.target.checked ? "create" : "skip")}
+                    />
+                    {" "}Add to Lagun
+                  </label>
+                </div>
+              )}
+            </div>
+          </>
+        ) : chip.operation.type === "set_field" ? (
           <input
             value={chip.operation.value}
             disabled={!chip.enabled}

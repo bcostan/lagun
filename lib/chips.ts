@@ -1,10 +1,15 @@
 import type { Operation } from "@/lib/operations";
+import type { EntityAction, EntityResolution } from "@/lib/resolutions";
 
 export type ChipState = {
   id: string;
   operation: Operation;
   enabled: boolean;
   lowConfidence: boolean;
+  isEntity: boolean;
+  entityAction?: EntityAction;
+  entityId?: string;
+  entityResolution?: EntityResolution;
   label: string;
   value: string;
   note?: string;
@@ -16,25 +21,42 @@ export function buildChipStates(
   operations: Operation[],
   proposalConfidence: number,
   reasoning?: string,
+  entityResolutions: EntityResolution[] = [],
 ): ChipState[] {
+  const resolutionByChip = new Map(entityResolutions.map((r) => [r.chipId, r]));
+
   return operations.map((op, index) => {
     const id = `${op.type}-${index}`;
-    const inScope = op.type !== "link_event" && op.type !== "link_organization";
+    const isEntity = op.type === "link_event" || op.type === "link_organization";
+    const resolution = resolutionByChip.get(id);
     const inferred = isInferredOperation(op, reasoning);
-    const lowConfidence = inScope && (proposalConfidence < LOW_CONFIDENCE_THRESHOLD || inferred);
+    const lowConfidence = !isEntity && (proposalConfidence < LOW_CONFIDENCE_THRESHOLD || inferred);
+
+    let note: string | undefined;
+    if (isEntity && resolution) {
+      if (resolution.hint === "new") {
+        note = "Create new and link to this contact";
+      } else if (resolution.hint === "unsure") {
+        note = "Pick an existing one or create new";
+      } else {
+        note = `Link to existing · ${resolution.suggestedName}`;
+      }
+    } else if (inferred) {
+      note = reasoning || "Inferred from the note, not stated directly";
+    }
 
     return {
       id,
       operation: op,
-      enabled: inScope,
+      enabled: true,
       lowConfidence,
-      label: chipLabel(op),
-      value: chipValue(op),
-      note: !inScope
-        ? "Events and organizations are not supported yet"
-        : inferred
-          ? reasoning || "Inferred from the note, not stated directly"
-          : undefined,
+      isEntity,
+      entityAction: resolution?.defaultAction,
+      entityId: resolution?.suggestedId,
+      entityResolution: resolution,
+      label: chipLabel(op, resolution),
+      value: chipValue(op, resolution),
+      note,
     };
   });
 }
@@ -50,7 +72,7 @@ function isInferredOperation(op: Operation, reasoning?: string): boolean {
   return false;
 }
 
-function chipLabel(op: Operation): string {
+function chipLabel(op: Operation, resolution?: EntityResolution): string {
   switch (op.type) {
     case "set_field":
       return op.field.replace("_", " ");
@@ -73,15 +95,15 @@ function chipLabel(op: Operation): string {
     case "create_contact":
       return "New contact";
     case "link_event":
-      return "New event";
+      return resolution?.hint === "new" ? "Create event" : "Link event";
     case "link_organization":
-      return "Organization";
+      return resolution?.hint === "new" ? "Create organization" : "Link organization";
     default:
       return "Change";
   }
 }
 
-function chipValue(op: Operation): string {
+function chipValue(op: Operation, resolution?: EntityResolution): string {
   switch (op.type) {
     case "set_field":
       return op.value;
@@ -107,9 +129,9 @@ function chipValue(op: Operation): string {
     case "create_contact":
       return op.name;
     case "link_event":
-      return `${op.event.name} (${op.link_type})`;
+      return `${resolution?.suggestedName ?? op.event.name} · ${op.link_type}`;
     case "link_organization":
-      return `${op.organization.name} (${op.link_type})`;
+      return `${resolution?.suggestedName ?? op.organization.name} · ${op.link_type}`;
     default:
       return "";
   }
@@ -144,4 +166,16 @@ export function updateOperationFromChip(chip: ChipState, value: string): Operati
     default:
       return op;
   }
+}
+
+export function buildEntityChoices(chips: ChipState[]): Record<string, { action: EntityAction; id?: string }> {
+  const choices: Record<string, { action: EntityAction; id?: string }> = {};
+  for (const chip of chips) {
+    if (!chip.isEntity) continue;
+    choices[chip.id] = {
+      action: chip.enabled ? (chip.entityAction ?? "skip") : "skip",
+      id: chip.entityAction === "existing" ? chip.entityId : undefined,
+    };
+  }
+  return choices;
 }

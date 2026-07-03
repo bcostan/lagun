@@ -4,7 +4,12 @@ import { db } from "@/db";
 import { captures } from "@/db/schema";
 import { extract } from "@/lib/extract";
 import { todayISO } from "@/lib/dates";
-import { resolveContactCandidates } from "@/lib/resolve";
+import {
+  resolveContactCandidates,
+  resolveEventCandidates,
+  resolveOrganizationCandidates,
+} from "@/lib/resolve";
+import { buildEntityResolutions } from "@/lib/resolutions";
 import { isAuthorized } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -26,9 +31,18 @@ export async function POST(request: Request) {
     .returning();
 
   try {
-    const candidates = await resolveContactCandidates(text);
+    const [contactCandidates, eventCandidates, organizationCandidates] = await Promise.all([
+      resolveContactCandidates(text),
+      resolveEventCandidates(text),
+      resolveOrganizationCandidates(text),
+    ]);
     const today = todayISO();
-    const proposal = await extract(text, today, { contacts: candidates });
+    const proposal = await extract(text, today, {
+      contacts: contactCandidates,
+      events: eventCandidates,
+      organizations: organizationCandidates,
+    });
+    const entityResolutions = await buildEntityResolutions(proposal.operations);
 
     await db
       .update(captures)
@@ -42,7 +56,12 @@ export async function POST(request: Request) {
       captureId: capture.id,
       rawText: text,
       proposal,
-      candidates,
+      candidates: {
+        contacts: contactCandidates,
+        events: eventCandidates,
+        organizations: organizationCandidates,
+      },
+      entityResolutions,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Extraction failed";

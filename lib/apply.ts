@@ -1,11 +1,21 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import { db } from "@/db";
-import { captures, contacts, interactions, relations } from "@/db/schema";
+import {
+  captures,
+  contactEvents,
+  contactOrganizations,
+  contacts,
+  events,
+  interactions,
+  organizations,
+  relations,
+} from "@/db/schema";
 import * as schema from "@/db/schema";
 import { splitName } from "@/lib/contacts";
 import { normalizeName } from "@/lib/normalize";
 import { operation, type Operation } from "@/lib/operations";
+import type { EntityChoice } from "@/lib/resolutions";
 
 const IN_SCOPE = new Set([
   "set_field",
@@ -18,6 +28,8 @@ const IN_SCOPE = new Set([
   "set_followup",
   "set_last_contact",
   "create_contact",
+  "link_event",
+  "link_organization",
 ]);
 
 type Db = NeonDatabase<typeof schema>;
@@ -34,16 +46,66 @@ type Snapshot = {
   contact: typeof contacts.$inferSelect | null;
   relations: (typeof relations.$inferSelect)[];
   interactions: (typeof interactions.$inferSelect)[];
+  contactEvents: (typeof contactEvents.$inferSelect)[];
+  contactOrganizations: (typeof contactOrganizations.$inferSelect)[];
+  createdEventIds: string[];
+  createdOrganizationIds: string[];
 };
+
+function asDate(value: unknown): Date | undefined {
+  if (value == null) return undefined;
+  if (value instanceof Date) return value;
+  if (typeof value === "string") return new Date(value);
+  return undefined;
+}
+
+function restoreContact(row: typeof contacts.$inferSelect) {
+  const { id: _id, createdAt, updatedAt: _updatedAt, ...data } = row;
+  return {
+    ...data,
+    createdAt: asDate(createdAt),
+    updatedAt: new Date(),
+  };
+}
+
+function restoreRelation(row: typeof relations.$inferSelect) {
+  const { id: _id, createdAt, ...data } = row;
+  return { ...data, createdAt: asDate(createdAt) };
+}
+
+function restoreInteraction(row: typeof interactions.$inferSelect) {
+  const { id: _id, createdAt, ...data } = row;
+  return { ...data, createdAt: asDate(createdAt) };
+}
+
+function restoreContactEvent(row: typeof contactEvents.$inferSelect) {
+  const { id: _id, createdAt, ...data } = row;
+  return { ...data, createdAt: asDate(createdAt) };
+}
+
+function restoreContactOrganization(row: typeof contactOrganizations.$inferSelect) {
+  const { id: _id, createdAt, ...data } = row;
+  return { ...data, createdAt: asDate(createdAt) };
+}
 
 async function loadSnapshot(tx: Db, contactId: string): Promise<Snapshot> {
   const [contact] = await tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
   const rels = await tx.select().from(relations).where(eq(relations.contactId, contactId));
   const ints = await tx.select().from(interactions).where(eq(interactions.contactId, contactId));
+  const evLinks = await tx.select().from(contactEvents).where(eq(contactEvents.contactId, contactId));
+  const orgLinks = await tx
+    .select()
+    .from(contactOrganizations)
+    .where(eq(contactOrganizations.contactId, contactId));
+
   return {
     contact: contact ?? null,
     relations: rels,
     interactions: ints,
+    contactEvents: evLinks,
+    contactOrganizations: orgLinks,
+    createdEventIds: [],
+    createdOrganizationIds: [],
   };
 }
 
@@ -102,13 +164,71 @@ async function ensureContact(
   return created;
 }
 
+async function resolveEventId(
+  tx: Db,
+  op: Extract<Operation, { type: "link_event" }>,
+  choice: EntityChoice | undefined,
+  snapshot: Snapshot,
+): Promise<string | null> {
+  const action = choice?.action ?? (op.match_hint === "new" ? "create" : "existing");
+  if (action === "skip") return null;
+
+  if (action === "existing") {
+    if (choice?.id) return choice.id;
+    const rows = await tx.select().from(events);
+    const match = rows.find((e) => normalizeName(e.name) === normalizeName(op.event.name));
+    return match?.id ?? choice?.id ?? null;
+  }
+
+  const [created] = await tx
+    .insert(events)
+    .values({
+      name: op.event.name,
+      series: op.event.series ?? null,
+      date: op.event.date ?? null,
+      location: op.event.location ?? null,
+    })
+    .returning();
+  snapshot.createdEventIds.push(created.id);
+  return created.id;
+}
+
+async function resolveOrganizationId(
+  tx: Db,
+  op: Extract<Operation, { type: "link_organization" }>,
+  choice: EntityChoice | undefined,
+  snapshot: Snapshot,
+): Promise<string | null> {
+  const action = choice?.action ?? (op.match_hint === "new" ? "create" : "existing");
+  if (action === "skip") return null;
+
+  if (action === "existing") {
+    if (choice?.id) return choice.id;
+    const rows = await tx.select().from(organizations);
+    const match = rows.find((o) => normalizeName(o.name) === normalizeName(op.organization.name));
+    return match?.id ?? null;
+  }
+
+  const [created] = await tx
+    .insert(organizations)
+    .values({
+      name: op.organization.name,
+      kind: op.organization.kind ?? null,
+    })
+    .returning();
+  snapshot.createdOrganizationIds.push(created.id);
+  return created.id;
+}
+
 export async function applyCapture(input: {
   captureId: string;
   targetName: string;
   contactId?: string;
   operations: unknown[];
+  entityChoices?: Record<string, EntityChoice>;
 }) {
   const ops = parseOperations(input.operations);
+  const entityChoices = input.entityChoices ?? {};
 
   return db.transaction(async (tx) => {
     const [capture] = await tx.select().from(captures).where(eq(captures.id, input.captureId)).limit(1);
@@ -118,7 +238,10 @@ export async function applyCapture(input: {
     let contact = await ensureContact(tx, input.targetName, ops, input.contactId);
     const snapshot = await loadSnapshot(tx, contact.id);
 
-    for (const op of ops) {
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const chipId = `${op.type}-${i}`;
+
       if (op.type === "create_contact") continue;
 
       if (op.type === "set_field") {
@@ -237,6 +360,62 @@ export async function applyCapture(input: {
           attributes: op.attributes ?? {},
           captureId: input.captureId,
         });
+        continue;
+      }
+
+      if (op.type === "link_event") {
+        const choice = entityChoices[chipId];
+        if (choice?.action === "skip") continue;
+
+        const eventId = await resolveEventId(tx, op, choice, snapshot);
+        if (!eventId) continue;
+
+        const existing = await tx
+          .select()
+          .from(contactEvents)
+          .where(
+            and(
+              eq(contactEvents.contactId, contact.id),
+              eq(contactEvents.eventId, eventId),
+              eq(contactEvents.linkType, op.link_type),
+            ),
+          )
+          .limit(1);
+        if (!existing.length) {
+          await tx.insert(contactEvents).values({
+            contactId: contact.id,
+            eventId,
+            linkType: op.link_type,
+          });
+        }
+        continue;
+      }
+
+      if (op.type === "link_organization") {
+        const choice = entityChoices[chipId];
+        if (choice?.action === "skip") continue;
+
+        const organizationId = await resolveOrganizationId(tx, op, choice, snapshot);
+        if (!organizationId) continue;
+
+        const existing = await tx
+          .select()
+          .from(contactOrganizations)
+          .where(
+            and(
+              eq(contactOrganizations.contactId, contact.id),
+              eq(contactOrganizations.organizationId, organizationId),
+              eq(contactOrganizations.linkType, op.link_type),
+            ),
+          )
+          .limit(1);
+        if (!existing.length) {
+          await tx.insert(contactOrganizations).values({
+            contactId: contact.id,
+            organizationId,
+            linkType: op.link_type,
+          });
+        }
       }
     }
 
@@ -260,28 +439,42 @@ export async function undoCapture(captureId: string) {
     if (!capture.applied) throw new Error("Capture is not applied");
     const snapshot = capture.snapshot as Snapshot | null;
     if (!snapshot) throw new Error("No snapshot to restore");
+    snapshot.createdEventIds = snapshot.createdEventIds ?? [];
+    snapshot.createdOrganizationIds = snapshot.createdOrganizationIds ?? [];
+    snapshot.contactEvents = snapshot.contactEvents ?? [];
+    snapshot.contactOrganizations = snapshot.contactOrganizations ?? [];
 
     if (snapshot.contact) {
       await tx
         .update(contacts)
-        .set({
-          ...snapshot.contact,
-          updatedAt: new Date(),
-        })
+        .set(restoreContact(snapshot.contact))
         .where(eq(contacts.id, snapshot.contact.id));
 
       await tx.delete(relations).where(eq(relations.contactId, snapshot.contact.id));
       await tx.delete(interactions).where(eq(interactions.contactId, snapshot.contact.id));
+      await tx.delete(contactEvents).where(eq(contactEvents.contactId, snapshot.contact.id));
+      await tx.delete(contactOrganizations).where(eq(contactOrganizations.contactId, snapshot.contact.id));
 
       if (snapshot.relations.length) {
-        await tx.insert(relations).values(
-          snapshot.relations.map(({ id: _id, ...row }) => row),
-        );
+        await tx.insert(relations).values(snapshot.relations.map(restoreRelation));
       }
       if (snapshot.interactions.length) {
-        await tx.insert(interactions).values(
-          snapshot.interactions.map(({ id: _id, ...row }) => row),
+        await tx.insert(interactions).values(snapshot.interactions.map(restoreInteraction));
+      }
+      if (snapshot.contactEvents?.length) {
+        await tx.insert(contactEvents).values(snapshot.contactEvents.map(restoreContactEvent));
+      }
+      if (snapshot.contactOrganizations?.length) {
+        await tx.insert(contactOrganizations).values(
+          snapshot.contactOrganizations.map(restoreContactOrganization),
         );
+      }
+
+      for (const eventId of snapshot.createdEventIds ?? []) {
+        await tx.delete(events).where(eq(events.id, eventId));
+      }
+      for (const orgId of snapshot.createdOrganizationIds ?? []) {
+        await tx.delete(organizations).where(eq(organizations.id, orgId));
       }
     } else {
       const proposal = capture.proposal as { target?: { name?: string } } | null;
@@ -289,10 +482,18 @@ export async function undoCapture(captureId: string) {
       if (name) {
         const row = await findContactByNameTx(tx, name);
         if (row) {
+          await tx.delete(contactOrganizations).where(eq(contactOrganizations.contactId, row.id));
+          await tx.delete(contactEvents).where(eq(contactEvents.contactId, row.id));
           await tx.delete(interactions).where(eq(interactions.contactId, row.id));
           await tx.delete(relations).where(eq(relations.contactId, row.id));
           await tx.delete(contacts).where(eq(contacts.id, row.id));
         }
+      }
+      for (const eventId of snapshot.createdEventIds ?? []) {
+        await tx.delete(events).where(eq(events.id, eventId));
+      }
+      for (const orgId of snapshot.createdOrganizationIds ?? []) {
+        await tx.delete(organizations).where(eq(organizations.id, orgId));
       }
     }
 

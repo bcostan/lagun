@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { ContactForm, type ContactFormValues } from "@/components/ContactForm";
 
 export default function EditContactPage({ params }: { params: Promise<{ id: string }> }) {
@@ -55,16 +54,14 @@ export default function EditContactPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <AppShell>
-      <section className="screen">
-        <Link href={id ? `/contacts/${id}` : "/contacts"} className="back">← Back</Link>
+    <section className="screen">
+      <Link href={id ? `/contacts/${id}` : "/contacts"} className="back mobile-only">← Back</Link>
         <div className="idxhead">Edit person</div>
         {initial ? (
           <ContactForm initial={initial} submitLabel="Save changes" onSubmit={handleSubmit} loading={loading} />
         ) : (
           <p className="empty">Loading…</p>
         )}
-      </section>
-    </AppShell>
+    </section>
   );
 }

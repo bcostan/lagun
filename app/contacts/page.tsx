@@ -1,9 +1,13 @@
-import { ContactsIndex } from "@/components/ContactsIndex";
-import { countContacts } from "@/lib/contacts";
+import { ContactsDesktopPlaceholder } from "@/components/ContactsDesktopPlaceholder";
+import { ContactsListPage } from "@/components/ContactsListPage";
 
 export const dynamic = "force-dynamic";
 
-export default async function ContactsPage() {
-  const contactCount = await countContacts();
-  return <ContactsIndex initialCount={contactCount} />;
+export default function ContactsPage() {
+  return (
+    <>
+      <ContactsListPage />
+      <ContactsDesktopPlaceholder />
+    </>
+  );
 }

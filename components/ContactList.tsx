@@ -55,15 +55,17 @@ export function ContactRow({
   company,
   categories,
   age,
+  selected,
 }: {
   id: string;
   name: string;
   company?: string | null;
   categories?: string[] | null;
   age: string;
+  selected?: boolean;
 }) {
   return (
-    <Link href={`/contacts/${id}`} className="row">
+    <Link href={`/contacts/${id}`} className={`row${selected ? " on" : ""}`}>
       <span className="nm">{name}</span>
       {company && <span className="co">{company}</span>}
       <span className="cats">

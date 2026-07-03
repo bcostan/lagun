@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { ContactForm, type ContactFormValues } from "@/components/ContactForm";
 
 const empty: ContactFormValues = {
@@ -42,12 +41,10 @@ export default function NewContactPage() {
   }
 
   return (
-    <AppShell>
-      <section className="screen">
-        <Link href="/contacts" className="back">← Index</Link>
+    <section className="screen">
+      <Link href="/contacts" className="back mobile-only">← Index</Link>
         <div className="idxhead">Add person</div>
         <ContactForm initial={empty} submitLabel="Add person" onSubmit={handleSubmit} loading={loading} />
-      </section>
-    </AppShell>
+    </section>
   );
 }
