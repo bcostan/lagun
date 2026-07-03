@@ -27,6 +27,7 @@ const IN_SCOPE = new Set([
   "add_interaction",
   "set_followup",
   "set_last_contact",
+  "update_contact_attributes",
   "create_contact",
   "link_event",
   "link_organization",
@@ -129,6 +130,16 @@ function mergeAttributes(
   return base;
 }
 
+function sortOperationsForApply(ops: Operation[]): Operation[] {
+  const addRelations = ops.filter((op) => op.type === "add_relation");
+  const updateRelations = ops.filter((op) => op.type === "update_relation");
+  const addInteractions = ops.filter((op) => op.type === "add_interaction");
+  const rest = ops.filter(
+    (op) => op.type !== "add_relation" && op.type !== "update_relation" && op.type !== "add_interaction",
+  );
+  return [...rest, ...addRelations, ...updateRelations, ...addInteractions];
+}
+
 async function findContactByNameTx(tx: Db, name: string) {
   const rows = await tx.select().from(contacts);
   const target = normalizeName(name);
@@ -227,7 +238,7 @@ export async function applyCapture(input: {
   operations: unknown[];
   entityChoices?: Record<string, EntityChoice>;
 }) {
-  const ops = parseOperations(input.operations);
+  const ops = sortOperationsForApply(parseOperations(input.operations));
   const entityChoices = input.entityChoices ?? {};
 
   return db.transaction(async (tx) => {
@@ -315,6 +326,19 @@ export async function applyCapture(input: {
         continue;
       }
 
+      if (op.type === "update_contact_attributes") {
+        const [updated] = await tx
+          .update(contacts)
+          .set({
+            attributes: mergeAttributes(contact.attributes as Record<string, unknown>, op.attributes),
+            updatedAt: new Date(),
+          })
+          .where(eq(contacts.id, contact.id))
+          .returning();
+        contact = updated;
+        continue;
+      }
+
       if (op.type === "add_relation") {
         await tx.insert(relations).values({
           contactId: contact.id,
@@ -333,7 +357,15 @@ export async function applyCapture(input: {
         const rel = relRows.find(
           (r) => r.name.toLowerCase() === op.match.toLowerCase(),
         );
-        if (!rel) continue;
+        if (!rel) {
+          await tx.insert(relations).values({
+            contactId: contact.id,
+            name: op.match,
+            type: "family",
+            attributes: op.attributes ?? {},
+          });
+          continue;
+        }
         await tx
           .update(relations)
           .set({ attributes: mergeAttributes(rel.attributes as Record<string, unknown>, op.attributes) })

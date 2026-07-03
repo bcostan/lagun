@@ -61,9 +61,21 @@ export function buildChipStates(
   });
 }
 
+function formatAttributes(attrs: Record<string, unknown>): string[] {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "birth_year") parts.push(`birth year ≈ ${v}`);
+    else if (k === "birthday") parts.push(`birthday ${v}`);
+    else if (Array.isArray(v)) parts.push(`${k}: ${v.join(" / ")}`);
+    else if (v != null && v !== "") parts.push(`${k}: ${String(v)}`);
+  }
+  return parts;
+}
+
 function isInferredOperation(op: Operation, reasoning?: string): boolean {
   if (op.type === "update_relation" && op.attributes.birth_year) return true;
   if (op.type === "add_relation" && op.relation.attributes?.birth_year) return true;
+  if (op.type === "update_contact_attributes" && op.attributes.birth_year) return true;
   if (!reasoning) return false;
   const lower = reasoning.toLowerCase();
   if (op.type === "add_relation" && lower.includes(op.relation.name.toLowerCase())) {
@@ -86,6 +98,8 @@ function chipLabel(op: Operation, resolution?: EntityResolution): string {
       return "New relation";
     case "update_relation":
       return "Check this · inferred";
+    case "update_contact_attributes":
+      return "Birthday";
     case "add_interaction":
       return "Timeline";
     case "set_followup":
@@ -111,15 +125,19 @@ function chipValue(op: Operation, resolution?: EntityResolution): string {
     case "add_tag":
     case "add_previous":
       return op.value;
-    case "add_relation":
-      return `${op.relation.name} · ${op.relation.type}`;
+    case "add_relation": {
+      const attrs = op.relation.attributes ?? {};
+      const extra = formatAttributes(attrs as Record<string, unknown>);
+      const base = `${op.relation.name} · ${op.relation.type}`;
+      return extra.length ? `${base} · ${extra.join(", ")}` : base;
+    }
     case "update_relation": {
-      const parts = Object.entries(op.attributes).map(([k, v]) => {
-        if (k === "birth_year") return `birth year ≈ ${v}`;
-        if (Array.isArray(v)) return `${k}: ${v.join(" / ")}`;
-        return `${k}: ${String(v)}`;
-      });
+      const parts = formatAttributes(op.attributes as Record<string, unknown>);
       return `${op.match}: ${parts.join(", ")}`;
+    }
+    case "update_contact_attributes": {
+      const parts = formatAttributes(op.attributes as Record<string, unknown>);
+      return parts.join(", ") || "details";
     }
     case "add_interaction":
       return `${op.summary} · ${op.date}`;
@@ -153,6 +171,16 @@ export function updateOperationFromChip(chip: ChipState, value: string): Operati
       const birthYear = parseInt(value, 10);
       if (!Number.isNaN(birthYear)) {
         return { ...op, attributes: { ...op.attributes, birth_year: birthYear } };
+      }
+      return op;
+    }
+    case "update_contact_attributes": {
+      const birthYear = parseInt(value, 10);
+      if (!Number.isNaN(birthYear)) {
+        return { ...op, attributes: { ...op.attributes, birth_year: birthYear } };
+      }
+      if (/^\d{2}-\d{2}$/.test(value.trim())) {
+        return { ...op, attributes: { ...op.attributes, birthday: value.trim() } };
       }
       return op;
     }

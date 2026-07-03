@@ -15,6 +15,15 @@ export default async function ContactDetailPage({ params }: Params) {
 
   const { contact, relations, interactions, captures, events: linkedEvents, organizations: linkedOrgs } = detail;
   const roleLine = [contact.role, contact.company].filter(Boolean).join(", ");
+  const contactAttrs = contact.attributes as { birth_year?: number; birthday?: string } | null;
+
+  function relationExtra(attrs: { birth_year?: number; birthday?: string; activities?: string[] }) {
+    return [
+      attrs.birth_year ? `≈${new Date().getFullYear() - attrs.birth_year}` : null,
+      attrs.birthday ? `bday ${attrs.birthday}` : null,
+      attrs.activities?.join(" / "),
+    ].filter(Boolean).join(", ");
+  }
 
   return (
     <section className="screen">
@@ -55,6 +64,12 @@ export default async function ContactDetailPage({ params }: Params) {
           {(contact.previous ?? []).map((item) => (
             <div className="field" key={item}><div className="lab">Was at</div><div className="val">{item}</div></div>
           ))}
+          {contactAttrs?.birthday && (
+            <div className="field"><div className="lab">Birthday</div><div className="val">{contactAttrs.birthday}</div></div>
+          )}
+          {contactAttrs?.birth_year && (
+            <div className="field"><div className="lab">Birth year</div><div className="val">≈ {contactAttrs.birth_year}</div></div>
+          )}
           <div className="field">
             <div className="lab">Last spoke</div>
             <div className="val">{formatRelativeDate(contact.lastContact)}</div>
@@ -99,14 +114,11 @@ export default async function ContactDetailPage({ params }: Params) {
 
         {relations.length > 0 && (
           <>
-            <div className="sec">People</div>
+            <div className="sec">People & pets</div>
             <div className="people">
               {relations.map((rel) => {
-                const attrs = rel.attributes as { birth_year?: number; activities?: string[] };
-                const extra = [
-                  attrs.birth_year ? `${new Date().getFullYear() - attrs.birth_year}` : null,
-                  attrs.activities?.join(" / "),
-                ].filter(Boolean).join(", ");
+                const attrs = rel.attributes as { birth_year?: number; birthday?: string; activities?: string[] };
+                const extra = relationExtra(attrs);
                 return (
                   <div className="person" key={rel.id}>
                     <span className="who">{rel.name}</span>

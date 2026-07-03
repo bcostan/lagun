@@ -19,6 +19,27 @@ function coerceOrgKind(kind: unknown): string | undefined {
   return "company";
 }
 
+function coerceAttributes(attrs: unknown): Record<string, unknown> {
+  if (!attrs || typeof attrs !== "object" || Array.isArray(attrs)) return {};
+  const out: Record<string, unknown> = { ...(attrs as Record<string, unknown>) };
+  if (out.birth_year != null) {
+    const year = typeof out.birth_year === "string" ? parseInt(out.birth_year, 10) : out.birth_year;
+    if (typeof year === "number" && !Number.isNaN(year)) out.birth_year = year;
+    else delete out.birth_year;
+  }
+  if (typeof out.birthday === "string") {
+    out.birthday = out.birthday.trim();
+  }
+  return out;
+}
+
+function sanitizeRelation(relation: unknown): unknown {
+  if (!relation || typeof relation !== "object") return relation;
+  const row = { ...(relation as Record<string, unknown>) };
+  if (row.attributes) row.attributes = coerceAttributes(row.attributes);
+  return row;
+}
+
 function sanitizeOperation(op: unknown): unknown {
   if (!op || typeof op !== "object") return op;
   const row = { ...(op as Record<string, unknown>) };
@@ -56,6 +77,18 @@ function sanitizeOperation(op: unknown): unknown {
 
   if ((type === "set_followup" || type === "set_last_contact" || type === "add_interaction") && typeof row.date === "string") {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) delete row.type;
+  }
+
+  if (type === "add_relation" && row.relation) {
+    row.relation = sanitizeRelation(row.relation);
+  }
+
+  if (type === "update_relation" && row.attributes) {
+    row.attributes = coerceAttributes(row.attributes);
+  }
+
+  if (type === "update_contact_attributes" && row.attributes) {
+    row.attributes = coerceAttributes(row.attributes);
   }
 
   return row;

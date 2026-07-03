@@ -18,8 +18,11 @@ Rules:
 - Identify the target person. If a close existing contact name is provided and clearly matches, use that exact name and set match_hint to "existing". If clearly new, set "new". If you cannot tell, set "unsure".
 - Only propose operations the note actually supports. Prefer fewer, correct operations. When something is inferred rather than stated, keep it but lower the overall confidence and explain it in reasoning.
 - Convert any age into an approximate birth year using today's date, stored as birth_year in the relevant attributes. Never store a bare age.
+- When a month-day birthday is given without a year (e.g. "March 12"), store it as birthday in attributes using MM-DD format.
+- The contact's own birthday or birth year belongs in update_contact_attributes on the target contact, not in a relation.
+- Family, colleagues, pets, and anyone (or any animal) linked to the person are add_relation operations, with facts about them in attributes. Pets and dogs use type "pet" and the animal's name as the relation name. Notes about that person or pet use add_interaction with subject "relation:<their name>".
+- For a new family member with an age, use add_relation with birth_year in attributes. Use update_relation only when the note clearly updates someone already linked to this contact.
 - Convert every relative date (today, yesterday, last week, Tuesday) into an absolute YYYY-MM-DD using today's date.
-- Family, colleagues, and anyone linked to the person are add_relation operations, with facts about them in attributes. Notes about that person use add_interaction with subject "relation:<their name>".
 - Interactions with the target person may set_last_contact to the date they happened. Only set_followup when the note implies a future action.
 - Events: when the note names a real-world event where the person was met or spoke, emit link_event with the event name, its series if you can infer it (e.g. series "SIAL" for "SIAL Paris 2026"), and the link_type. If a close existing event is provided, set match_hint "existing"; otherwise "new".
 - Organizations: when the note ties the person to a company or startup (works at, founded, invests in, advises, supports), emit link_organization with the name, kind if known, and the link_type. Set match_hint against any provided existing organizations.
@@ -50,7 +53,7 @@ const tool: Anthropic.Tool = {
         items: {
           type: "object",
           description:
-            "One operation. type is one of: set_field (field,value), add_category (value), add_tag (value), add_previous (value), add_relation (relation:{name,type,attributes}), update_relation (match,attributes), add_interaction (subject,date,summary,attributes), link_event (event:{name,series?,date?,location?}, link_type, match_hint), link_organization (organization:{name,kind?}, link_type, match_hint), set_followup (date), set_last_contact (date), create_contact (name). link_type for events: met|spoke_at|attended|exhibited|organized. link_type for organizations: works_at|founded|invests_in|advises|supports|board|former.",
+            "One operation. type is one of: set_field (field,value), add_category (value), add_tag (value), add_previous (value), add_relation (relation:{name,type,attributes}), update_relation (match,attributes), add_interaction (subject,date,summary,attributes), link_event (event:{name,series?,date?,location?}, link_type, match_hint), link_organization (organization:{name,kind?}, link_type, match_hint), set_followup (date), set_last_contact (date), update_contact_attributes (attributes), create_contact (name). link_type for events: met|spoke_at|attended|exhibited|organized. link_type for organizations: works_at|founded|invests_in|advises|supports|board|former. Relation attributes may include birth_year (number) and birthday (MM-DD). Contact attributes may include birth_year and birthday.",
           properties: {
             type: { type: "string" },
             field: { type: "string" },

@@ -85,23 +85,67 @@ export function OperationChip({
               })
             }
           />
-        ) : chip.operation.type === "update_relation" ? (
+        ) : chip.operation.type === "update_relation" || chip.operation.type === "update_contact_attributes" ? (
           <>
             <div className="v">
-              {chip.operation.match}&apos;s birth year <b>≈ {String(chip.operation.attributes.birth_year)}</b>
+              {chip.operation.type === "update_relation" ? (
+                <>{chip.operation.match}&apos;s birth year <b>≈ {String(chip.operation.attributes.birth_year)}</b></>
+              ) : (
+                <>
+                  {chip.operation.attributes.birthday && (
+                    <>Birthday <b>{String(chip.operation.attributes.birthday)}</b></>
+                  )}
+                  {chip.operation.attributes.birth_year && (
+                    <> · birth year <b>≈ {String(chip.operation.attributes.birth_year)}</b></>
+                  )}
+                </>
+              )}
             </div>
+            {chip.note && <div className="note">{chip.note}</div>}
+            {chip.operation.attributes.birth_year != null && (
+              <input
+                inputMode="numeric"
+                placeholder="Birth year"
+                value={String(chip.operation.attributes.birth_year ?? "")}
+                disabled={!chip.enabled}
+                onChange={(e) =>
+                  onChange({
+                    ...chip,
+                    operation: updateOperationFromChip(chip, e.target.value),
+                    value: e.target.value,
+                  })
+                }
+              />
+            )}
+          </>
+        ) : chip.operation.type === "add_relation" && chip.operation.relation.attributes?.birth_year ? (
+          <>
+            <div className="v" dangerouslySetInnerHTML={{ __html: formatValue(chip.value) }} />
             {chip.note && <div className="note">{chip.note}</div>}
             <input
               inputMode="numeric"
-              value={String(chip.operation.attributes.birth_year ?? "")}
+              placeholder="Birth year"
+              value={String(chip.operation.relation.attributes.birth_year ?? "")}
               disabled={!chip.enabled}
-              onChange={(e) =>
+              onChange={(e) => {
+                const op = chip.operation;
+                if (op.type !== "add_relation") return;
+                const birthYear = parseInt(e.target.value, 10);
                 onChange({
                   ...chip,
-                  operation: updateOperationFromChip(chip, e.target.value),
+                  operation: {
+                    ...op,
+                    relation: {
+                      ...op.relation,
+                      attributes: {
+                        ...op.relation.attributes,
+                        birth_year: Number.isNaN(birthYear) ? op.relation.attributes?.birth_year : birthYear,
+                      },
+                    },
+                  },
                   value: e.target.value,
-                })
-              }
+                });
+              }}
             />
           </>
         ) : (

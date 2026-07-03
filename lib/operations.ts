@@ -70,6 +70,10 @@ export const operation = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("set_followup"), date: isoDate }),
   z.object({ type: z.literal("set_last_contact"), date: isoDate }),
+  z.object({
+    type: z.literal("update_contact_attributes"),
+    attributes: z.record(z.any()).default({}),
+  }),
   z.object({ type: z.literal("create_contact"), name: z.string() }),
 ]);
 
