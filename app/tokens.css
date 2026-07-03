@@ -1,0 +1,48 @@
+/* Design tokens for the "Lagun" direction. Import once (e.g. app/globals.css)
+   and derive every color and type choice from these variables so the built app
+   matches the mock. Fonts: Newsreader (names/headings), Inter (body/UI),
+   IBM Plex Mono (dates, labels, categories). Load them in the app head. */
+
+:root {
+  /* color */
+  --paper:   #F1F2EF; /* app background, cool grey-white */
+  --card:    #FBFBF9; /* raised surfaces */
+  --ink:     #20242A; /* text and names */
+  --muted:   #6B7178; /* secondary text, labels */
+  --hair:    #DADCD6; /* dividers, borders */
+  --accent:  #293A6B; /* fountain-pen indigo, primary actions and links */
+  --applied: #2E5E4E; /* pine, a change that was written */
+  --review:  #8A3324; /* oxblood, uncertainty and undo */
+
+  /* type */
+  --serif: "Newsreader", Georgia, serif;                 /* names, headings */
+  --sans:  "Inter", -apple-system, BlinkMacSystemFont, sans-serif; /* body, UI */
+  --mono:  "IBM Plex Mono", ui-monospace, Menlo, monospace;        /* data, labels */
+
+  /* type scale */
+  --t-name:    34px; /* contact nameplate */
+  --t-title:   24px; /* screen headings */
+  --t-lede:    26px; /* capture lede */
+  --t-row:     18px; /* index row name */
+  --t-body:  14.5px;
+  --t-label:   10px; /* mono, uppercase, letterspaced */
+
+  /* radii and spacing */
+  --r-card: 14px;
+  --r-chip: 12px;
+  --pad:    20px;
+}
+
+/* Roles, so the app applies type consistently:
+   - Names and headings use var(--serif), weight 440 to 520, tight tracking.
+   - Body and buttons use var(--sans).
+   - Field labels, dates, categories use var(--mono), 10px, uppercase,
+     letter-spacing about .12em, color var(--muted).
+   Quality floor: keep visible keyboard focus, respect prefers-reduced-motion,
+   and design mobile-first with the capture bar within thumb reach. */
+
+*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
