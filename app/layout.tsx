@@ -21,11 +21,19 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Lagun",
-  description: "Personal CRM you update in a sentence",
+  description: "The people you keep.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F1F2EF",
+  themeColor: "#293A6B",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
